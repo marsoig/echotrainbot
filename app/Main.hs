@@ -1,10 +1,10 @@
-module Main where
-
-import Lib
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE RecordWildCards #-}
+
+
+import Lib
 
 import           Network.HTTP.Conduit           (simpleHttp)
 import           Control.Lens
@@ -43,13 +43,23 @@ data Message = Message {  message_id :: Integer
                         , from       :: Maybe User
                         , date       :: Integer
                         , chat       :: Chat
-                        , text       :: Maybe Text} deriving (Show)
+                        , text       :: Maybe Text
+                        , sticker    :: Maybe Sticker} deriving (Show)
 
 data Results = Results {  update_id :: Integer
                         , message   :: Message} deriving (Show)
 
 data Updates = Updates { ok :: Bool
                        , results :: [Results]} deriving (Show)
+
+data Sticker = Sticker {  file_id :: Text
+                        , file_unique_id :: Text
+                        , width :: Integer
+                        , height :: Integer
+                        , is_animated :: Bool
+                        , emoji :: Maybe String
+                        , set_name :: Maybe String
+                        , file_size :: Maybe Integer} deriving (Show)
 
 instance FromJSON User where
  parseJSON = withObject "user" $ \o -> do
@@ -81,6 +91,7 @@ instance FromJSON Message where
    date                       <- o.: "date"
    chat                       <- o.: "chat"
    text                       <- o.:? "text"
+   sticker                    <- o.:? "sticker"
    return Message {..}
 
 instance FromJSON Results where
@@ -94,6 +105,19 @@ instance FromJSON Updates where
    ok                         <- o.:  "ok"
    results                    <- o.:  "result"
    return Updates {..}
+
+instance FromJSON Sticker where
+ parseJSON = withObject "sticker" $ \o -> do
+   file_id                      <- o.: "file_id"
+   file_unique_id               <- o.: "file_unique_id"
+   width                        <- o.: "width"
+   height                       <- o.: "height"
+   is_animated                  <- o.: "is_animated"
+   emoji                        <- o.:? "emoji"
+   set_name                     <- o.:? "set_name"
+   file_size                    <- o.:? "file_size"
+   return Sticker {..}
+
 updatesDownload :: IO BSL.ByteString
 updatesDownload = simpleHttp address
 
@@ -113,5 +137,14 @@ makeTextMessage = do
     messageText     <- pure (fromMaybe (pack []) (text.message.last.results $ receivedUpdates)) :: IO Text
     messageChatId   <- pure (chatId.chat.message.last.results $ receivedUpdates) :: IO Integer
     sendingQuery    <- pure (T.concat [pack "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/sendMessage?chat_id=", pack $ show messageChatId, pack "&text=", messageText]) :: IO Text
+    check           <- simpleHttp (unpack sendingQuery)
+    return sendingQuery
+
+makeStickerMessage :: IO (Text)
+makeStickerMessage = do
+    receivedUpdates <- getUpdates
+    sticker_id      <- pure (file_id $ fromJust (sticker.message.last.results $ receivedUpdates)) :: IO Text
+    messageChatId   <- pure (chatId.chat.message.last.results $ receivedUpdates) :: IO Integer
+    sendingQuery    <- pure (T.concat [pack "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/sendSticker?chat_id=", pack $ show messageChatId, pack "&sticker=", sticker_id]) :: IO Text
     check           <- simpleHttp (unpack sendingQuery)
     return sendingQuery
