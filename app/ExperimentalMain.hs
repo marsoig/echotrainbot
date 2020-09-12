@@ -14,6 +14,7 @@ import           Data.Aeson.Lens
 import           Data.ByteString.Lazy.Internal  as BSL
 import           Control.Monad.Trans.Maybe
 import           Data.Maybe                     (fromMaybe)
+import           Data.ByteString                as BS
 --import qualified Data.ByteString.Char8         as BS
 --import         Data.Text                      ( Text )
 import           Data.Text.Lazy                as T (Text, concat, pack, unpack)
@@ -173,42 +174,50 @@ checkMessageType msg = if | (text $ msg) /= Nothing -> MText
 
 urlToken = "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8"
 
-decodeToUpdates :: ByteString -> Updates
+decodeToUpdates :: BSL.ByteString -> Updates
 decodeToUpdates x = case decode x :: Maybe Updates of
                       Just u -> u
                       Nothing -> Updates { ok = False, results = []}
 
-processUpdates :: Updates -> 
+checkUpdates :: BSL.ByteString -> Integer
+checkUpdates bts = if null (results $ (decodeToUpdates bts)) then 0
+                    else (update_id $ last $ results $ (decodeToUpdates bts))
 
-addChat :: Message -> String
-addChat msg = "?chat_id=" ++ (show (chat_id $ chat $ msg))
-
-data SendingSet = SendingSet {command :: String, parameters :: String }
+makeNewUpdateRequest :: BSL.ByteString -> String
+makeNewUpdateRequest bts = if checkUpdates bts == 0 then urlToken ++ "/getUpdates?timeout=3000"
+                                 else urlToken ++ "/getUpdates?offset=" ++ show (checkUpdates bts) ++ "&timeout=3000"
+data SendingSet = SendingSet {command :: String, parameters :: String}
 
 addMessageParameters :: Message -> SendingSet
-addMessageParameters msg = case checkMessageType msg of
-                                | MText -> SendingSet {command = "/sendMessage", parameters = ("&text=" ++ (fromJust $ text $ msg))}
-                                | MSticker -> SendingSet {command = "/sendSticker", parameters = ("&sticker=" ++ (file_id $ fromJust $ sticker $ msg))}
-                                | MAnimation -> SendingSet {command = "/sendAnimation", parameters = ("&animation=" ++ (file_id $ fromJust $ animation $ msg))}
-                                | MAudio -> SendingSet {command = "/sendAudio", parameters = ("&audio=" ++ (file_id $ fromJust $ audio $ msg))}
-                                | MDocument -> SendingSet {command = "/sendDocument", parameters = ("&document=" ++ (file_id $ fromJust $ document $ msg))}
-                                | MVideo -> SendingSet {command = "/sendVideo", parameters = ("&video=" ++ (file_id $ fromJust $ video $ msg))}
-                                | MVideoNote -> SendingSet {command = "/sendVideoNote", parameters = ("&video_note=" ++ (file_id $ fromJust $ video_note $ msg))}
-                                | MVoice -> SendingSet {command = "/sendVoice", parameters = ("&voice=" ++ (file_id $ fromJust $ voice $ msg))}
-                                | MContact -> SendingSet {command = "/sendContact", parameters = ("&phone_number=" ++ (phone_number $ fromJust $ contact $ msg) ++ "&first_name=" ++ (first_name $ fromJust $ contact $ msg))}
-                                | MPhoto -> SendingSet {command = "/sendPhoto", parameters = ("&photo=" ++ (file_id $ head $ fromJust $ photo $ msg))}
-                                | MError -> SendingSet {command = "/sendMessage", parameters = ("&text=Error with message type")}
+addMessageParameters msg = case (checkMessageType msg) of
+                                 MText -> SendingSet {command = "/sendMessage", parameters = ("&text=" ++ (fromJust $ text $ msg))}
+                                 MSticker -> SendingSet {command = "/sendSticker", parameters = ("&sticker=" ++ (file_id $ fromJust $ sticker $ msg))}
+                                 MAnimation -> SendingSet {command = "/sendAnimation", parameters = ("&animation=" ++ (file_id $ fromJust $ animation $ msg))}
+                                 MAudio -> SendingSet {command = "/sendAudio", parameters = ("&audio=" ++ (file_id $ fromJust $ audio $ msg))}
+                                 MDocument -> SendingSet {command = "/sendDocument", parameters = ("&document=" ++ (file_id $ fromJust $ document $ msg))}
+                                 MVideo -> SendingSet {command = "/sendVideo", parameters = ("&video=" ++ (file_id $ fromJust $ video $ msg))}
+                                 MVideoNote -> SendingSet {command = "/sendVideoNote", parameters = ("&video_note=" ++ (file_id $ fromJust $ video_note $ msg))}
+                                 MVoice -> SendingSet {command = "/sendVoice", parameters = ("&voice=" ++ (file_id $ fromJust $ voice $ msg))}
+                                 MContact -> SendingSet {command = "/sendContact", parameters = ("&phone_number=" ++ (phone_number $ fromJust $ contact $ msg) ++ "&first_name=" ++ (first_name $ fromJust $ contact $ msg))}
+                                 MPhoto -> SendingSet {command = "/sendPhoto", parameters = ("&photo=" ++ (file_id $ head $ fromJust $ photo $ msg))}
+                                 MError -> SendingSet {command = "/sendMessage", parameters = ("&text=Error with message type")}
 
 makeURLRequest :: Message -> SendingSet -> String
 makeURLRequest msg sendset = urlToken ++ (command $ sendset) ++ "?chat_id=" ++ (show $ chat_id $ chat $ msg) ++ (parameters $ sendset) ++ cap
                               where cap = case (caption $ msg) of
-                                           | Nothing -> ""
-                                           | Just x -> "&caption=" ++ x
+                                            Nothing -> ""
+                                            Just x -> "&caption=" ++ x
+
+sendAnswerOrNot :: ByteString -> IO (ByteString)
+sendAnswerOrNot bst = if checkUpdates bst == 0 then pure (BS.empty) :: IO (ByteString)
+                          else simpleHttp address where
+                             address = makeUrlRequest msg (addMessageParameters msg) where
+                                msg = message $ last $ results $ (decodeToUpdates bst)
 
 
 getUpdates :: String -> IO (Updates)
 getUpdates adr = do
     download <- simpleHttp adr
-    updates <- decodeToUpdates download
-
-    return updates-}
+    answer <- sendAnswerOrNot download
+    newQuery <- getUpdates (makeNewUpdateRequest download)
+    return newQuery
