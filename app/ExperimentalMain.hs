@@ -8,13 +8,10 @@ import Lib
 
 import           GHC.Generics
 import           Network.HTTP.Conduit           (simpleHttp)
-import           Control.Lens
 import           Data.Aeson
-import           Data.Aeson.Lens
-import           Data.ByteString.Lazy.Internal  as BSL
 import           Control.Monad.Trans.Maybe
 import           Data.Maybe                     (fromMaybe)
-import           Data.ByteString                as BS
+import           Data.ByteString.Lazy                as BSL (empty, ByteString)
 --import qualified Data.ByteString.Char8         as BS
 --import         Data.Text                      ( Text )
 import           Data.Text.Lazy                as T (Text, concat, pack, unpack)
@@ -25,12 +22,12 @@ import           Data.Maybe                    (fromJust)
 
 data User = User {  id                          :: Integer
                   , is_bot                      :: Bool
-                  , first_name                  :: Text
-                  , last_name                   :: Maybe Text
-                  , username                    :: Maybe Text
-                  , language_code               :: Maybe Text
-                  , can_join_groups             :: Maybe Text
-                  , can_read_all_group_messages :: Maybe Text
+                  , first_name                  :: String
+                  , last_name                   :: Maybe String
+                  , username                    :: Maybe String
+                  , language_code               :: Maybe String
+                  , can_join_groups             :: Maybe String
+                  , can_read_all_group_messages :: Maybe String
                   , supports_inline_queries     :: Maybe Bool  } deriving (Show, Eq, Generic)
 
 instance FromJSON User
@@ -65,7 +62,7 @@ data Results = Results {  update_id :: Integer
 
 instance FromJSON Results
 data Updates = Updates { ok      :: Bool
-                       , results :: [Results]} deriving (Show, Eq, Generic)
+                       , result :: [Results]} deriving (Show, Eq, Generic)
 
 instance FromJSON Updates
 
@@ -77,8 +74,8 @@ data PhotoSize = PhotoSize {  file_id        :: String
 
 instance FromJSON PhotoSize
 
-data Sticker = Sticker {  file_id        :: Text
-                        , file_unique_id :: Text
+data Sticker = Sticker {  file_id        :: String
+                        , file_unique_id :: String
                         , width          :: Integer
                         , height         :: Integer
                         , is_animated    :: Bool
@@ -157,50 +154,36 @@ data Contact = Contact {  phone_number :: String
 instance FromJSON Contact
 
 
-data MessageType = MText | MSticker | MAnimation | MAudio | MDocument | MVideo | MVideoNote | MVoice | MContact | MPhoto | MError
-
-checkMessageType :: Message -> MessageType
-checkMessageType msg = if | (text $ msg) /= Nothing -> MText
-                          | (sticker $ msg) /= Nothing -> MSticker
-                          | (animation $ msg) /= Nothing -> MAnimation
-                          | (audio $ msg) /= Nothing -> MAudio
-                          | (document $ msg) /= Nothing -> MDocument
-                          | (video $ msg) /= Nothing -> MVideo
-                          | (video_note $ msg) /= Nothing -> MVideoNote
-                          | (voice $ msg) /= Nothing -> MVoice
-                          | (contact $ msg) /= Nothing -> MContact
-                          | (photo $ msg) /= Nothing -> MPhoto
-                          | otherwise -> MError
-
 urlToken = "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8"
 
-decodeToUpdates :: BSL.ByteString -> Updates
+decodeToUpdates :: ByteString -> Updates
 decodeToUpdates x = case decode x :: Maybe Updates of
                       Just u -> u
-                      Nothing -> Updates { ok = False, results = []}
+                      Nothing -> Updates { ok = False, result = []}
 
-checkUpdates :: BSL.ByteString -> Integer
-checkUpdates bts = if null (results $ (decodeToUpdates bts)) then 0
-                    else (update_id $ last $ results $ (decodeToUpdates bts))
+checkUpdates :: ByteString -> Integer
+checkUpdates bts = if null (result $ (decodeToUpdates bts)) then 0
+                    else (update_id $ last $ result $ (decodeToUpdates bts))
 
-makeNewUpdateRequest :: BSL.ByteString -> String
+makeNewUpdateRequest :: ByteString -> String
 makeNewUpdateRequest bts = if checkUpdates bts == 0 then urlToken ++ "/getUpdates?timeout=3000"
-                                 else urlToken ++ "/getUpdates?offset=" ++ show (checkUpdates bts) ++ "&timeout=3000"
+                                 else urlToken ++ "/getUpdates?offset=" ++ show (checkUpdates (bts) +1) ++ "&timeout=3000"
 data SendingSet = SendingSet {command :: String, parameters :: String}
 
-addMessageParameters :: Message -> SendingSet
-addMessageParameters msg = case (checkMessageType msg) of
-                                 MText -> SendingSet {command = "/sendMessage", parameters = ("&text=" ++ (fromJust $ text $ msg))}
-                                 MSticker -> SendingSet {command = "/sendSticker", parameters = ("&sticker=" ++ (file_id $ fromJust $ sticker $ msg))}
-                                 MAnimation -> SendingSet {command = "/sendAnimation", parameters = ("&animation=" ++ (file_id $ fromJust $ animation $ msg))}
-                                 MAudio -> SendingSet {command = "/sendAudio", parameters = ("&audio=" ++ (file_id $ fromJust $ audio $ msg))}
-                                 MDocument -> SendingSet {command = "/sendDocument", parameters = ("&document=" ++ (file_id $ fromJust $ document $ msg))}
-                                 MVideo -> SendingSet {command = "/sendVideo", parameters = ("&video=" ++ (file_id $ fromJust $ video $ msg))}
-                                 MVideoNote -> SendingSet {command = "/sendVideoNote", parameters = ("&video_note=" ++ (file_id $ fromJust $ video_note $ msg))}
-                                 MVoice -> SendingSet {command = "/sendVoice", parameters = ("&voice=" ++ (file_id $ fromJust $ voice $ msg))}
-                                 MContact -> SendingSet {command = "/sendContact", parameters = ("&phone_number=" ++ (phone_number $ fromJust $ contact $ msg) ++ "&first_name=" ++ (first_name $ fromJust $ contact $ msg))}
-                                 MPhoto -> SendingSet {command = "/sendPhoto", parameters = ("&photo=" ++ (file_id $ head $ fromJust $ photo $ msg))}
-                                 MError -> SendingSet {command = "/sendMessage", parameters = ("&text=Error with message type")}
+func :: Message -> SendingSet
+func (Message {text = Just x})                                                = SendingSet {command = "/sendMessage", parameters = "&text=" ++ x}
+func (Message {sticker = Just (Sticker {file_id = x}) })                      = SendingSet {command = "/sendSticker", parameters = "&sticker=" ++ x}
+func (Message {animation = Just (Animation {file_id = x}) })                  = SendingSet {command = "/sendAnimation", parameters = "&animation=" ++ x}
+func (Message {audio = Just (Audio {file_id = x}) })                          = SendingSet {command = "/sendAudio", parameters = "&audio=" ++ x}
+func (Message {document = Just (Document {file_id = x}) })                    = SendingSet {command = "/sendDocument", parameters = "&document=" ++ x}
+func (Message {video = Just (Video {file_id = x}) })                          = SendingSet {command = "/sendVideo", parameters = "&video=" ++ x}
+func (Message {video_note = Just (VideoNote {file_id = x}) })                 = SendingSet {command = "/sendVideoNote", parameters = "&video_note=" ++ x}
+func (Message {voice = Just (Voice {file_id = x}) })                          = SendingSet {command = "/sendVoice", parameters = "&voice=" ++ x}
+func (Message {contact = Just (Contact {phone_number = p, first_name = f}) }) = SendingSet {command = "/sendContact", parameters ="&phone_number=" ++ p ++ "&first_name=" ++ f}
+func (Message {photo = Just photolist})                                       = SendingSet {command = "/sendPhoto", parameters = "&photo=" ++ getFileIdPhoto (last $ photolist)}
+                                                                                   where getFileIdPhoto (PhotoSize {file_id = f}) = f
+
+
 
 makeURLRequest :: Message -> SendingSet -> String
 makeURLRequest msg sendset = urlToken ++ (command $ sendset) ++ "?chat_id=" ++ (show $ chat_id $ chat $ msg) ++ (parameters $ sendset) ++ cap
@@ -209,15 +192,17 @@ makeURLRequest msg sendset = urlToken ++ (command $ sendset) ++ "?chat_id=" ++ (
                                             Just x -> "&caption=" ++ x
 
 sendAnswerOrNot :: ByteString -> IO (ByteString)
-sendAnswerOrNot bst = if checkUpdates bst == 0 then pure (BS.empty) :: IO (ByteString)
+sendAnswerOrNot bst = if checkUpdates bst == 0 then pure (BSL.empty) :: IO (BSL.ByteString)
                           else simpleHttp address where
-                             address = makeUrlRequest msg (addMessageParameters msg) where
-                                msg = message $ last $ results $ (decodeToUpdates bst)
+                             address = makeURLRequest msg (func msg) where
+                                msg = message $ last $ result $ (decodeToUpdates bst)
 
 
-getUpdates :: String -> IO (Updates)
+getUpdates :: String -> IO (String)
 getUpdates adr = do
     download <- simpleHttp adr
     answer <- sendAnswerOrNot download
+    check <- pure (decodeToUpdates download) :: IO (Updates)
     newQuery <- getUpdates (makeNewUpdateRequest download)
-    return newQuery
+    chup <- pure (makeNewUpdateRequest download) :: IO (String)
+    return chup
