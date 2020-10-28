@@ -4,11 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2ba77bc0cc9023fd273161ac9cc1955ec576d5b4d77ce411415464447af4d8ec
+-- hash: 8c9585680fd2dc3f5efbe8d277f1820d1e4af279040e2146ffadfb9d96139882
 
 name:           echotrainbot
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/echotrainbot#readme>
+description:    Please see the README on GitHub at <https://github.com/marsoig/echotrainbot#readme>
 homepage:       https://github.com/githubuser/echotrainbot#readme
 bug-reports:    https://github.com/githubuser/echotrainbot/issues
 author:         Author name here
@@ -33,7 +33,14 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , config-parser ==1.2.0.0
+    , hslogger ==1.3.1.0
+    , http-conduit >=2.3.7.3
+    , text >=1.2.4.0
+    , transformers ==0.5.6.2
   default-language: Haskell2010
 
 executable echotrainbot-exe
@@ -44,8 +51,15 @@ executable echotrainbot-exe
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , config-parser ==1.2.0.0
     , echotrainbot
+    , hslogger ==1.3.1.0
+    , http-conduit >=2.3.7.3
+    , text >=1.2.4.0
+    , transformers ==0.5.6.2
   default-language: Haskell2010
 
 test-suite echotrainbot-test
@@ -57,6 +71,13 @@ test-suite echotrainbot-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base >=4.7 && <5
+    , bytestring ==0.10.10.0
+    , config-parser ==1.2.0.0
     , echotrainbot
+    , hslogger ==1.3.1.0
+    , http-conduit >=2.3.7.3
+    , text >=1.2.4.0
+    , transformers ==0.5.6.2
   default-language: Haskell2010
