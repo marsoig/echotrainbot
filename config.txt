@@ -1,0 +1,2 @@
+telegram_token = "1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8"
+log_level = DEBUG

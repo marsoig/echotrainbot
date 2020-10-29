@@ -1,9 +1,11 @@
+module ConfigParser where
+
 import Data.Char
 import Data.List
 import Data.List.Split
 
-main :: IO ()
-main = readFile "config.txt" >>= (print . parseConfig)
+mainTest :: IO ()
+mainTest = readFile "config.txt" >>= (print . parseConfig)
 
 parseConfig :: String -> Config
 parseConfig = foldr addConfigValue defaultConfig . clean . lines
@@ -11,8 +13,8 @@ parseConfig = foldr addConfigValue defaultConfig . clean . lines
 
 addConfigValue :: String -> Config -> Config
 addConfigValue raw config = case key of
-    "telegramToken" -> config {telegramToken  = values}
-    "logLevel"      -> config {logLevel       = values}
+    "telegramtoken" -> config {telegramToken  = values}
+    "loglevel"      -> config {logLevel       = values}
     _               -> config
     where (k, vs) = span (/= ' ') raw
           key = map toLower k

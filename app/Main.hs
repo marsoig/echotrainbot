@@ -6,7 +6,7 @@
 
 import Lib
 
-import           Text.ConfigParser
+import           ConfigParser
 import           System.Log.Logger
 import           GHC.Generics
 import           Network.HTTP.Conduit           (simpleHttp)
@@ -201,10 +201,9 @@ main:: IO (String)
 main = do
   updateGlobalLogger "LoggingExample.Main" (setLevel DEBUG)
   infoM "LoggingExample.Main" "EchoBot is started"
-  a <- parseFromFile conpar "./config.txt"
-  print a 
-  beg <- getUpdates "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/getUpdates"
-  return beg
+  mainTest
+  --beg <- getUpdates "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/getUpdates"
+  return "end"
 
 getUpdates :: String -> IO (String)
 getUpdates adr = do
@@ -214,17 +213,3 @@ getUpdates adr = do
     newQuery <- getUpdates (makeNewUpdateRequest download)
     chup <- pure (makeNewUpdateRequest download) :: IO (String)
     return chup
-
-conpar :: ConfigParser (Maybe String, Maybe Priority)
-conpar = configParser (Nothing, Nothing)
-         [ ConfigOption
-              {key = "telegram_token"
-              , parser = string
-              , action = \s (_, n) -> (Just s, n)
-              }
-        , ConfigOption
-              {key = "log_level"
-              , parser = Priority
-              , action = \n (s, _) -> (s, Just n)
-            }
-         ]
