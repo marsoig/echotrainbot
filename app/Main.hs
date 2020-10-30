@@ -4,8 +4,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE MultiWayIf #-}
 
+module Main where
 import Lib
 
+import           Text.Read                      (readMaybe)
 import           ConfigParser
 import           System.Log.Logger
 import           GHC.Generics
@@ -153,6 +155,21 @@ data Contact = Contact {  phone_number :: String
 
 instance FromJSON Contact
 
+data SendingSet = SendingSet {command :: String, parameters :: String}
+
+analyzeMessage :: Message -> SendingSet
+analyzeMessage (Message {text = Just x})                                                = SendingSet {command = "/sendMessage", parameters = "&text=" ++ x}
+analyzeMessage (Message {sticker = Just (Sticker {file_id = x}) })                      = SendingSet {command = "/sendSticker", parameters = "&sticker=" ++ x}
+analyzeMessage (Message {animation = Just (Animation {file_id = x}) })                  = SendingSet {command = "/sendAnimation", parameters = "&animation=" ++ x}
+analyzeMessage (Message {audio = Just (Audio {file_id = x}) })                          = SendingSet {command = "/sendAudio", parameters = "&audio=" ++ x}
+analyzeMessage (Message {document = Just (Document {file_id = x}) })                    = SendingSet {command = "/sendDocument", parameters = "&document=" ++ x}
+analyzeMessage (Message {video = Just (Video {file_id = x}) })                          = SendingSet {command = "/sendVideo", parameters = "&video=" ++ x}
+analyzeMessage (Message {video_note = Just (VideoNote {file_id = x}) })                 = SendingSet {command = "/sendVideoNote", parameters = "&video_note=" ++ x}
+analyzeMessage (Message {voice = Just (Voice {file_id = x}) })                          = SendingSet {command = "/sendVoice", parameters = "&voice=" ++ x}
+analyzeMessage (Message {contact = Just (Contact {phone_number = p, first_name = f}) }) = SendingSet {command = "/sendContact", parameters ="&phone_number=" ++ p ++ "&first_name=" ++ f}
+analyzeMessage (Message {photo = Just photolist})                                       = SendingSet {command = "/sendPhoto", parameters = "&photo=" ++ getFileIdPhoto (last $ photolist)}
+                                                                                   where getFileIdPhoto (PhotoSize {file_id = f}) = f
+
 
 urlToken = "https://api.telegram.org/bot"
 
@@ -161,56 +178,61 @@ decodeToUpdates x = case decode x :: Maybe Updates of
                       Just u -> u
                       Nothing -> Updates { ok = False, result = []}
 
-checkUpdates :: ByteString -> Integer
-checkUpdates bts = if null (result $ (decodeToUpdates bts)) then 0
-                    else (update_id $ last $ result $ (decodeToUpdates bts))
+updatesRequest :: ByteString -> String -> String
+updatesRequest upd token = if null (result $ (decodeToUpdates upd)) then "https://api.telegram.org/bot" ++ token ++ "/getUpdates?timeout=3000"
+                            else  "https://api.telegram.org/bot" ++ token ++ "/getUpdates?offset=" ++ lastMessageId ++ "&timeout=3000"
+                             where lastMessageId = show ((update_id $ last $ result $ (decodeToUpdates upd)) +1)
 
-makeNewUpdateRequest :: ByteString -> String
-makeNewUpdateRequest bts = if checkUpdates bts == 0 then urlToken ++ "/getUpdates?timeout=3000"
-                                 else urlToken ++ "/getUpdates?offset=" ++ show (checkUpdates (bts) +1) ++ "&timeout=3000"
-data SendingSet = SendingSet {command :: String, parameters :: String}
-
-func :: Message -> SendingSet
-func (Message {text = Just x})                                                = SendingSet {command = "/sendMessage", parameters = "&text=" ++ x}
-func (Message {sticker = Just (Sticker {file_id = x}) })                      = SendingSet {command = "/sendSticker", parameters = "&sticker=" ++ x}
-func (Message {animation = Just (Animation {file_id = x}) })                  = SendingSet {command = "/sendAnimation", parameters = "&animation=" ++ x}
-func (Message {audio = Just (Audio {file_id = x}) })                          = SendingSet {command = "/sendAudio", parameters = "&audio=" ++ x}
-func (Message {document = Just (Document {file_id = x}) })                    = SendingSet {command = "/sendDocument", parameters = "&document=" ++ x}
-func (Message {video = Just (Video {file_id = x}) })                          = SendingSet {command = "/sendVideo", parameters = "&video=" ++ x}
-func (Message {video_note = Just (VideoNote {file_id = x}) })                 = SendingSet {command = "/sendVideoNote", parameters = "&video_note=" ++ x}
-func (Message {voice = Just (Voice {file_id = x}) })                          = SendingSet {command = "/sendVoice", parameters = "&voice=" ++ x}
-func (Message {contact = Just (Contact {phone_number = p, first_name = f}) }) = SendingSet {command = "/sendContact", parameters ="&phone_number=" ++ p ++ "&first_name=" ++ f}
-func (Message {photo = Just photolist})                                       = SendingSet {command = "/sendPhoto", parameters = "&photo=" ++ getFileIdPhoto (last $ photolist)}
-                                                                                   where getFileIdPhoto (PhotoSize {file_id = f}) = f
-
-
-
-makeURLRequest :: Message -> SendingSet -> String
-makeURLRequest msg sendset = urlToken ++ (command $ sendset) ++ "?chat_id=" ++ (show $ chat_id $ chat $ msg) ++ (parameters $ sendset) ++ cap
+makeAnswerRequest :: Message -> String -> SendingSet -> String
+makeAnswerRequest msg token sendset = "https://api.telegram.org/bot" ++ token ++ (command $ sendset) ++ "?chat_id=" ++ (show $ chat_id $ chat $ msg) ++ (parameters $ sendset) ++ cap
                               where cap = case (caption $ msg) of
                                             Nothing -> ""
                                             Just x -> "&caption=" ++ x
 
-sendAnswerOrNot :: ByteString -> IO (ByteString)
-sendAnswerOrNot bst = if checkUpdates bst == 0 then pure (BSL.empty) :: IO (BSL.ByteString)
-                          else simpleHttp address where
-                             address = makeURLRequest msg (func msg) where
-                                msg = message $ last $ result $ (decodeToUpdates bst)
+checkUpdates :: ByteString -> IO ()
+checkUpdates x = case decode x :: Maybe Updates of
+                   Nothing -> errorM "Logging.Main" "Could not parse updates"
+                   Just (Updates {ok = True, result = []}) -> infoM "Logging.Main" "No new messages"
+                   _ -> infoM  "Logging.Main" "New message encountered"
+
+sendAnswer :: ByteString -> String -> IO (ByteString)
+sendAnswer upd token = simpleHttp (makeAnswerRequest msg token (analyzeMessage msg))
+  where msg = message $ last $ result $ (decodeToUpdates upd)
+
+checkConfig :: Config -> IO ()
+checkConfig config = if telegramToken config == "" then errorM "Logging.Main" "Telegram token was not found. Please write telegram token in the file config.txt"
+                      else
+                        if (readMaybe (logLevel config) :: Maybe Priority) == Nothing then warningM "Logging.Main" "Could not read logging level from config.txt. Logging level is set as DEBUG by default"
+                          else infoM "Logging.Main" "Configuration file was parsed"
+
+botLoop :: Integer -> String -> IO (String)
+botLoop messageId token = do
+  infoM "LoggingExample.Main" ("BotLoop is started, id=" ++ show messageId)
+  updates <- case messageId of
+                      0 -> simpleHttp ("https://api.telegram.org/bot" ++ token ++ "/getUpdates?timeout=3000")
+                      _ -> simpleHttp ("https://api.telegram.org/bot" ++ token ++ "/getUpdates?offset=" ++ show messageId ++ "&timeout=3000")
+  checkUpdates updates
+  case decode updates :: Maybe Updates of
+    Just (Updates {ok = True, result = []}) -> return ()
+    Just (Updates {ok = True, result = x}) -> do {sendAnswer updates token;
+                                                  messageId <- pure ((update_id $ last $ x) + 1) :: IO (Integer);
+                                                  debugM "Logging.Main" ("Answer on message " ++ show messageId ++ " was sent")}
+    _ -> error "Could not parse updates"
+  messageId <- case decode updates :: Maybe Updates of
+    Just (Updates {ok = True, result = []}) -> pure 0 :: IO (Integer)
+    Just (Updates {ok = True, result = x}) -> do pure ((update_id $ last $ x) + 1) :: IO (Integer)
+    _ -> error "Could not parse updates"
+  botLoop messageId token
+  return "end"
 
 main:: IO (String)
 main = do
-  config <- parseConfig (readFile "config.txt")
-  updateGlobalLogger "LoggingExample.Main" (setLevel (read logLevel config :: Priority))
-  infoM "LoggingExample.Main" "EchoBot is started"
+  config <- readFile "config.txt" >>= ((\x -> pure x :: IO Config).parseConfig)
+  --config <- pure (parseConfig configText) :: IO Config
+  checkConfig config
   mainTest
-  --beg <- getUpdates "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/getUpdates"
+  token <- pure (telegramToken config) :: IO String
+  updateGlobalLogger "LoggingExample.Main" (setLevel (read (logLevel config) :: Priority))
+  infoM "LoggingExample.Main" "EchoBot is started"
+  botLoop 0 token
   return "end"
-
-getUpdates :: String -> IO (String)
-getUpdates adr = do
-    download <- simpleHttp adr
-    answer <- sendAnswerOrNot download
-    check <- pure (decodeToUpdates download) :: IO (Updates)
-    newQuery <- getUpdates (makeNewUpdateRequest download)
-    chup <- pure (makeNewUpdateRequest download) :: IO (String)
-    return chup

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1acf7e802fab16fbc22db5ce8f6cd59656cd1a44440c73ee73299fda8c6bbef5
+-- hash: 6492c4183a6dfe9b5713af59e765d2057f8d38a1aafe7f4025fa0d27dbf42b41
 
 name:           echotrainbot
 version:        0.1.0.0
@@ -27,6 +27,7 @@ source-repository head
 
 library
   exposed-modules:
+      ConfigParser
       Lib
   other-modules:
       Paths_echotrainbot
@@ -46,7 +47,6 @@ library
 executable echotrainbot-exe
   main-is: Main.hs
   other-modules:
-      ConfigParser
       Paths_echotrainbot
   hs-source-dirs:
       app

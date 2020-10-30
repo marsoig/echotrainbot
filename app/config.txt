@@ -1,2 +1,0 @@
-telegramToken = sh123
-logLevel = DEBUG
