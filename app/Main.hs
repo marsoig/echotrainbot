@@ -13,10 +13,10 @@ import           Network.HTTP.Conduit           (simpleHttp)
 import           Data.Aeson
 import           Control.Monad.Trans.Maybe
 import           Data.Maybe                     (fromMaybe, fromJust)
-import           Data.ByteString.Lazy                as BSL (empty, ByteString)
+import           Data.ByteString.Lazy           as BSL (empty, ByteString)
 --import qualified Data.ByteString.Char8         as BS
 --import         Data.Text                      ( Text )
-import           Data.Text.Lazy                as T (Text, concat, pack, unpack)
+import           Data.Text.Lazy                 as T (Text, concat, pack, unpack)
 --import qualified Data.Text.Lazy.IO             as T
 
 
@@ -199,7 +199,8 @@ sendAnswerOrNot bst = if checkUpdates bst == 0 then pure (BSL.empty) :: IO (BSL.
 
 main:: IO (String)
 main = do
-  updateGlobalLogger "LoggingExample.Main" (setLevel DEBUG)
+  config <- parseConfig (readFile "config.txt")
+  updateGlobalLogger "LoggingExample.Main" (setLevel (read logLevel config :: Priority))
   infoM "LoggingExample.Main" "EchoBot is started"
   mainTest
   --beg <- getUpdates "https://api.telegram.org/bot1293826122:AAHMwYErxB-irpptkb7tvz8oP8ehHEEzRh8/getUpdates"

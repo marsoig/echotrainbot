@@ -4,26 +4,28 @@ import Data.Char
 import Data.List
 import Data.List.Split
 
-mainTest :: IO ()
-mainTest = readFile "config.txt" >>= (print . parseConfig)
-
-parseConfig :: String -> Config
-parseConfig = foldr addConfigValue defaultConfig . clean . lines
-    where clean = filter (not . flip any ["#", ";", "", " "] . (==) . take 1)
-
-addConfigValue :: String -> Config -> Config
-addConfigValue raw config = case key of
-    "telegramtoken" -> config {telegramToken  = values}
-    "loglevel"      -> config {logLevel       = values}
-    _               -> config
-    where (k, vs) = span (/= ' ') raw
-          key = map toLower k
-          values = tail vs
-
 data Config = Config
     { telegramToken :: String
     , logLevel :: String
     } deriving (Show)
+
+parseConfig:: String -> Config
+parseConfig s = foldr addValue defaultConfig (getConfig s)
+
+getConfig :: String -> [(String,String)]
+getConfig = clean.map (span (/= ' ')).filter (\x -> head x /= '#').lines
+
+clean :: [(String, String)] -> [(String, String)]
+clean = map (\(x,y) -> (x, drop 3 y))
+
+mainTest :: IO ()
+mainTest = readFile "config.txt" >>= (print . parseConfig)
+
+addValue :: (String, String) -> Config -> Config
+addValue (key, value) config = case key of
+  "telegramToken" -> config {telegramToken = value}
+  "logLevel"      -> config {logLevel      = value}
+  _               -> config
 
 defaultConfig :: Config
 defaultConfig = Config "" ""
